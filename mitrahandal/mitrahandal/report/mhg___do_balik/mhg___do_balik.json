@@ -1,0 +1,40 @@
+{
+ "add_total_row": 1,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2026-03-12 19:00:34.825070",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "json": "{}",
+ "letterhead": null,
+ "modified": "2026-03-13 14:12:07.620699",
+ "modified_by": "Administrator",
+ "module": "Mitrahandal",
+ "name": "MHG - DO BALIK",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT\n    ds.customer AS \"customer\",\n    DATE(dt.departure_time) AS \"tgl\",\n    COALESCE(ds.custom_address_line, ds.address) AS \"alamat\",\n    dt.driver_name AS \"driver\",\n    dt.custom_assistant_name AS \"kenek\",\n    dt.vehicle AS \"vehicle\",\n    ds.delivery_note AS \"delivery_note\",\n    dn.total_qty AS \"total_qty\",\n    dn.grand_total AS \"grand_total\",\n    ds.visited AS \"visited\",\n    ds.custom_reason AS \"reason\",\n    dt.name AS \"delivery_trip\"\nFROM\n    `tabDelivery Trip` dt\nJOIN\n    `tabDelivery Stop` ds ON ds.parent = dt.name\nJOIN \n    `tabDelivery Note` dn ON ds.delivery_note = dn.name\nWHERE \n  ds.visited = 1\n  AND ds.custom_reason = 'Terkirim'\n  AND DATE(dt.departure_time)  BETWEEN %(start_date)s AND %(end_date)s",
+ "ref_doctype": "Delivery Trip",
+ "report_name": "MHG - DO BALIK",
+ "report_script": "",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Fulfillment User"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Delivery User"
+  },
+  {
+   "role": "Delivery Manager"
+  }
+ ],
+ "timeout": 0
+}
