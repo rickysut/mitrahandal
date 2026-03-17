@@ -15,6 +15,7 @@
   "customer",
   "customer_name",
   "logitude",
+  "img",
   "section_break_njzy",
   "store_inventory"
  ],
@@ -61,10 +62,12 @@
    "read_only": 1
   },
   {
+   "columns": 5,
    "fieldname": "section_break_njzy",
    "fieldtype": "Section Break"
   },
   {
+   "columns": 5,
    "fieldname": "store_inventory",
    "fieldtype": "Table",
    "label": "Store Inventory",
@@ -81,13 +84,18 @@
    "fieldtype": "Float",
    "label": "Longitude",
    "precision": "6"
+  },
+  {
+   "fieldname": "img",
+   "fieldtype": "Attach Image",
+   "label": "Image"
   }
  ],
  "grid_page_length": 50,
  "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-16 12:10:00.224340",
+ "modified": "2026-03-17 10:16:35.801948",
  "modified_by": "Administrator",
  "module": "Mitrahandal",
  "name": "Sales Activities",
