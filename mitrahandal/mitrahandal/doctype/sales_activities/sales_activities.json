@@ -14,8 +14,10 @@
   "salesman",
   "customer",
   "customer_name",
-  "logitude",
+  "longitude",
   "img",
+  "arrival",
+  "outlet_open",
   "section_break_njzy",
   "store_inventory"
  ],
@@ -80,22 +82,34 @@
    "precision": "6"
   },
   {
-   "fieldname": "logitude",
+   "fieldname": "img",
+   "fieldtype": "Attach Image",
+   "label": "Image"
+  },
+  {
+   "fieldname": "longitude",
    "fieldtype": "Float",
    "label": "Longitude",
    "precision": "6"
   },
   {
-   "fieldname": "img",
-   "fieldtype": "Attach Image",
-   "label": "Image"
+   "default": "0",
+   "fieldname": "arrival",
+   "fieldtype": "Check",
+   "label": "Arrival"
+  },
+  {
+   "default": "0",
+   "fieldname": "outlet_open",
+   "fieldtype": "Check",
+   "label": "Outlet Open"
   }
  ],
  "grid_page_length": 50,
  "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-17 10:16:35.801948",
+ "modified": "2026-03-25 10:37:24.308034",
  "modified_by": "Administrator",
  "module": "Mitrahandal",
  "name": "Sales Activities",

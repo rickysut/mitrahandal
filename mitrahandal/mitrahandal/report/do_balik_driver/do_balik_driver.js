@@ -26,28 +26,26 @@ frappe.query_reports["DO Balik Driver"] = {
 			}
         },
 		{
-			"label": __('Kenek'),
-			"fieldname": "assistant",
-			fieldtype: 'Link',
-			options: 'Driver',
-			reqd: 1,
-			get_query: function() {
-				return {
-					filters: {
-						custom_assistant: 1,
-						status: 'Active'
-					}
-				};
-			}
+			"label": __('RIT'),
+			"fieldname": "ritase",
+			fieldtype: 'Data',
+			reqd: 0,
 		},
-        {
-			label: __('Kendaraan'),
-			fieldname: 'vehicle',
-			fieldtype: 'Link',
-			options: 'Vehicle',
-			reqd: 1
-			
-		}
+        
+		{
+            "fieldname": "delivery_note",
+            "label": __("Delivery Note"),
+            "fieldtype": "Link",
+            "options": "Delivery Note",
+            "reqd": 0,
+            get_query: function() {
+                return {
+                    filters: {
+                        status: 'To Bill'
+                    }
+                };
+            }
+        }
     ],
 
     onload: function(report) {
