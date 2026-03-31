@@ -45,6 +45,12 @@ frappe.query_reports["DO Balik Driver"] = {
                     }
                 };
             }
+        },
+        {
+            "fieldname": "dn_list",
+            "fieldtype": "Data",
+            "label": __("DN List"),
+            "hidden": 1
         }
     ],
 

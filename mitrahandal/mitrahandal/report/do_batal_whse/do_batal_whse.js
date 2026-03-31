@@ -31,6 +31,21 @@ frappe.query_reports["DO Batal Whse"] = {
                     }
                 };
             }
+        },
+        {
+            "fieldname": "delivery_note",
+            "label": __("Delivery Note"),
+            "fieldtype": "Link",
+            "options": "Delivery Note",
+            "reqd": 0,
+            get_query: function() {
+                return {
+                    filters: {
+                        status: 'To Bill',
+                        docstatus: ['!=', 2]
+                    }
+                };
+            }
         }
     ],
 

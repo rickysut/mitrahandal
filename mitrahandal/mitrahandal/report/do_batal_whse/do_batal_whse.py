@@ -28,7 +28,8 @@ def execute(filters=None):
 
 def get_columns():
 	return [
-		{"label": "Invoice No", "fieldname": "delivery_note", "width": 260},
+		{"label": "Invoice No", "fieldname": "delivery_note", "fieldtype": "Link", "options": "Delivery Note","width": 260},
+		{"label": "Doc. No", "fieldname": "doc_no", "width": 100},
 		{"label": "Nama Toko", "fieldname": "customer", "fieldtype": "Link", "options": "Customer", "width": 200},
 		{"label": "Alamat", "fieldname": "address", "width": 260},
 		{"label": "Qty", "fieldname": "total_qty", "fieldtype": "Float", "width": 120},
@@ -84,6 +85,11 @@ def get_data(filters):
 		stop_filters["custom_warehouse"] = filters.get("warehouse")
 		log_debug(f"Warehouse filter applied to stops: {filters.get('warehouse')}")
 
+	# Apply delivery_note filter to Delivery Stop
+	if filters.get("delivery_note"):
+		stop_filters["delivery_note"] = filters.get("delivery_note")
+		log_debug(f"Delivery Note filter applied to stops: {filters.get('delivery_note')}")
+
 	try:
 		stops = frappe.get_all(
 			"Delivery Stop",
@@ -95,6 +101,7 @@ def get_data(filters):
 				"customer_address",
 				"delivery_note",
 				"custom_warehouse",
+				"custom_doc_no",
 				"visited",
 				"custom_reason",
 				"custom_time",
@@ -126,6 +133,7 @@ def get_data(filters):
 			dn_map[stop.delivery_note]["warehouse"] = stop.custom_warehouse
 			dn_map[stop.delivery_note]["total_qty"] = stop.custom_total_qty or 0
 			dn_map[stop.delivery_note]["grand_total"] = stop.grand_total or 0
+			dn_map[stop.delivery_note]["custom_doc_no"] = stop.custom_doc_no or "-"
 
 	log_debug(f"Total unique delivery notes: {len(dn_map)}")
 
@@ -150,6 +158,7 @@ def get_data(filters):
 			row_data = {
 				"no": counter,
 				"delivery_note": delivery_note,
+				"doc_no": info["custom_doc_no"],
 				"customer": info["customer"],
 				"address": info["address"],
 				"total_qty": info["total_qty"],

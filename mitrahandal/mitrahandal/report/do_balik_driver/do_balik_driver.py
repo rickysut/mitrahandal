@@ -69,19 +69,40 @@ def get_data(filters):
         stop_filters["delivery_note"] = filters.get("delivery_note")
         log_debug(f"delivery_note filter applied: {filters.get('delivery_note')}")
 
+    # Handle dn_list filter from UI (array of DN numbers)
+    dn_list = []
+    if filters.get("dn_list"):
+        dn_list_raw = filters.get("dn_list")
+        
+        # Handle both string and list input
+        if isinstance(dn_list_raw, list):
+            dn_list = dn_list_raw
+        else:
+            # Split comma-separated string into list
+            dn_list = [dn.strip() for dn in dn_list_raw.split(",") if dn.strip()]
+        
+        log_debug(f"DN List: {dn_list}")
+        
+        # Apply dn_list filter to stops
+        if dn_list:
+            stop_filters["delivery_note"] = ["in", dn_list]
+            log_debug(f"Applied dn_list filter to delivery_note: {dn_list}")
+
     trips = frappe.get_all(
         "Delivery Trip",
         filters={**trip_filters, "status": "Completed"},
-        fields=["name", "departure_time", "driver_name", "custom_assistant_name", "vehicle", "custom_rit"]
+        fields=["name", "departure_time", "driver_name", "custom_assistant_name", "vehicle", "custom_rit", "custom_plate_no"]
     )
 
     res_driver = ""
     res_assistant = ""
     res_ritase = ""
+    res_plate_no = ""
     if trips:
         res_driver = trips[0].driver_name
         res_assistant = trips[0].custom_assistant_name
         res_ritase = trips[0].custom_rit
+        res_plate_no = trips[0].custom_plate_no
 
     log_debug(f"Total trips found (status=Completed): {len(trips)}")
     
@@ -124,14 +145,6 @@ def get_data(filters):
     total_value = 0
 
     for stop in stops:
-        # Filter tambahan dari UI (jika ada)
-        # if filters.get("customer") and stop.customer != filters.get("customer"):
-        #     log_debug(f"  - Filtered out by customer: {stop.customer} != {filters.get('customer')}")
-        #     continue
-
-        if filters.get("warehouse") and stop.custom_warehouse != filters.get("warehouse"):
-            log_debug(f"  - Filtered out by warehouse: {stop.custom_warehouse} != {filters.get('warehouse')}")
-            continue
 
         trip = trip_map.get(stop.parent)
 
@@ -147,6 +160,7 @@ def get_data(filters):
         data.append({
             "no": counter,
             "delivery_trip": stop.parent,
+            "plate_no": res_plate_no,
             "ritase": res_ritase,
             "customer": stop.custom_customer_name,
             "address": stop.customer_address,
@@ -156,6 +170,7 @@ def get_data(filters):
             "total_qty": stop.custom_total_qty,
             "grand_total": stop.grand_total,
             "doc_no": stop.custom_doc_no,
+            "driver_name": res_driver,
             "assistant_name": res_assistant,
             "report_date": report_date,
             "tgl_cetak": tgl_cetak,

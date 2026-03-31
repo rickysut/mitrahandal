@@ -110,11 +110,3 @@ app_license = "MIT"
 
 # Each overriding function accepts a `data` argument;
 # it is generated from the request
-
-
-app_name = "mitrahandal"
-app_title = "Mitrahandal"
-app_publisher = "Mitrahandal"
-app_description = "Custom App for Mitrahandal"
-app_email = "info@mitrahandal.com"
-app_license = "MIT"
