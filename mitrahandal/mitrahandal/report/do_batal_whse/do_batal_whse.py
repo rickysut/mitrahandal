@@ -11,7 +11,7 @@ from datetime import datetime
 # Setup logging to mitrahandal/logs folder
 log_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "logs")
 os.makedirs(log_dir, exist_ok=True)
-log_file = os.path.join(log_dir, "do_batal_whse.log")
+log_file = os.path.join(log_dir, "do_batal_whse-" + now_datetime().strftime("%Y-%m-%d") + ".log")
 
 def log_debug(message):
 	timestamp = now_datetime().strftime("%Y-%m-%d %H:%M:%S")

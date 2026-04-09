@@ -10,35 +10,26 @@
         {
             "fieldname": "company",
             "label": "Company",
-            "fieldtype": "Link",
-            "options": "Company",
+            "fieldtype": "Data",
             "reqd": 1
         },
         {
-            "fieldname": "warehouse",
-            "label": "Warehouse",
-            "fieldtype": "Link",
-            "options": "Warehouse",
-            "reqd": 0
+            "fieldname": "branch",
+            "label": "Branch",
+            "fieldtype": "Data",
+            "reqd": 1
         },
         {
-            "fieldname": "from_date",
-            "label": "From Date",
+            "fieldname": "sdate",
+            "label": "Date",
             "fieldtype": "Date",
-            "reqd": 0
+            "reqd": 1
         },
         {
-            "fieldname": "to_date",
-            "label": "To Date",
-            "fieldtype": "Date",
-            "reqd": 0
-        },
-        {
-            "fieldname": "customer",
-            "label": "Customer",
-            "fieldtype": "Link",
-            "options": "Customer",
-            "reqd": 0
+            "fieldname": "sales_persons",
+            "label": "Sales Person",
+            "fieldtype": "Data",
+            "reqd": 1
         }
     ],
     "idx": 0,
