@@ -1,0 +1,331 @@
+# ============================================================
+# FILE: adorama_app/api/bulk_dn_return.py
+#
+# Cara pasang:
+# 1. Taruh di  adorama_app/api/bulk_dn_return.py
+# 2. Pastikan  adorama_app/api/__init__.py  ada (boleh kosong)
+# 3. bench restart
+# ============================================================
+
+import frappe
+from frappe import _
+from frappe.utils import flt, nowdate
+import json
+
+
+# ─────────────────────────────────────────────────────────────
+# EXPOSED: Ambil items dari beberapa DN sekaligus
+# Menghindari permission issue pada frappe.client.get_list
+# untuk child table Delivery Note Item
+# ─────────────────────────────────────────────────────────────
+@frappe.whitelist()
+def get_dn_items(dn_names):
+    """Ambil semua Delivery Note Item dari list DN yang submitted."""
+    if isinstance(dn_names, str):
+        dn_names = json.loads(dn_names)
+
+    if not dn_names:
+        return []
+
+    # Validasi permission per DN
+    for dn in dn_names:
+        if not frappe.has_permission("Delivery Note", "read", dn):
+            frappe.throw(_(f"Tidak ada akses ke Delivery Note: {dn}"), frappe.PermissionError)
+
+    rows = frappe.db.sql("""
+        SELECT
+            dni.parent,
+            dni.item_code,
+            dni.item_name,
+            dni.qty,
+            dni.uom,
+            dni.rate,
+            dni.warehouse,
+            dni.name,
+            dni.against_sales_order,
+            dni.so_detail
+        FROM `tabDelivery Note Item` dni
+        INNER JOIN `tabDelivery Note` dn ON dn.name = dni.parent
+        WHERE dni.parent IN %(dn_names)s
+          AND dn.docstatus = 1
+        ORDER BY dni.parent, dni.idx
+    """, {"dn_names": dn_names}, as_dict=True)
+
+    return rows
+
+
+# ─────────────────────────────────────────────────────────────
+# EXPOSED: Ambil list warehouse aktif
+# ─────────────────────────────────────────────────────────────
+@frappe.whitelist()
+def get_active_warehouses():
+    """Ambil warehouse aktif — menghindari permission issue."""
+    return frappe.db.get_all(
+        "Warehouse",
+        filters={"disabled": 0, "is_group": 0},
+        fields=["name"],
+        order_by="name asc",
+        limit_page_length=0,
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# HELPER: Cari Sales Invoice yang terhubung ke sebuah DN
+# ─────────────────────────────────────────────────────────────
+def _get_si_for_dn(dn_name):
+    """
+    Cari Sales Invoice submitted yang punya item dari DN ini.
+    Karena 1 DN = 1 SI, ambil SI pertama yang cocok.
+    Returns: si_name (str) or None
+    """
+    result = frappe.db.sql("""
+        SELECT DISTINCT sii.parent
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE sii.delivery_note = %(dn)s
+          AND si.docstatus = 1
+          AND si.is_return = 0
+        LIMIT 1
+    """, {"dn": dn_name}, as_dict=True)
+
+    return result[0]["parent"] if result else None
+
+
+# ─────────────────────────────────────────────────────────────
+# HELPER: Buat Credit Note dari 1 SI dengan item tertentu
+# ─────────────────────────────────────────────────────────────
+def _create_credit_note(si_name, return_items_for_si, remarks, auto_submit):
+    """
+    Buat Return Sales Invoice (Credit Note) untuk si_name.
+
+    return_items_for_si: list dict {
+        item_code, qty (positif), rate, uom, si_item_name
+    }
+    """
+    si = frappe.get_doc("Sales Invoice", si_name)
+
+    # Build map: item_code -> SI item row (ambil yang pertama jika duplikat)
+    si_item_map = {}
+    for row in si.items:
+        if row.item_code not in si_item_map:
+            si_item_map[row.item_code] = row
+
+    credit_items = []
+    for it in return_items_for_si:
+        qty = flt(it["qty"])
+        if qty <= 0:
+            continue
+
+        # Cari SI row: prioritas by si_item_name, fallback by item_code
+        si_row = None
+        if it.get("si_item_name"):
+            for row in si.items:
+                if row.name == it["si_item_name"]:
+                    si_row = row
+                    break
+        if not si_row:
+            si_row = si_item_map.get(it["item_code"])
+
+        credit_items.append({
+            "item_code"         : it["item_code"],
+            "item_name"         : si_row.item_name if si_row else it["item_code"],
+            "qty"               : -qty,          # NEGATIF
+            "rate"              : flt(it.get("rate") or (si_row.rate if si_row else 0)),
+            "uom"               : it.get("uom") or (si_row.uom if si_row else ""),
+            "stock_uom"         : si_row.stock_uom if si_row else it.get("uom", ""),
+            "conversion_factor" : si_row.conversion_factor if si_row else 1,
+            "income_account"    : si_row.income_account if si_row else "",
+            "cost_center"       : si_row.cost_center if si_row else "",
+            "description"       : si_row.description if si_row else "",
+            "sales_invoice_item": si_row.name if si_row else "",
+        })
+
+    if not credit_items:
+        frappe.throw(_(f"Tidak ada item valid untuk Credit Note dari SI {si_name}"))
+
+    credit_note = frappe.get_doc({
+        "doctype"            : "Sales Invoice",
+        "is_return"          : 1,
+        "return_against"     : si_name,
+        "customer"           : si.customer,
+        "company"            : si.company,
+        "posting_date"       : nowdate(),
+        "due_date"           : nowdate(),
+        "currency"           : si.currency,
+        "conversion_rate"    : si.conversion_rate,
+        "selling_price_list" : si.selling_price_list,
+        "price_list_currency": si.price_list_currency,
+        "plc_conversion_rate": si.plc_conversion_rate,
+        "customer_address"   : si.customer_address,
+        "debit_to"           : si.debit_to,
+        "taxes_and_charges"  : si.taxes_and_charges,
+        "remarks"            : remarks or f"Credit Note untuk return dari SI {si_name}",
+        "items"              : credit_items,
+    })
+
+    # Salin taxes dari SI asli agar pajak ikut terbalik
+    for tax in si.taxes:
+        credit_note.append("taxes", {
+            "charge_type" : tax.charge_type,
+            "account_head": tax.account_head,
+            "description" : tax.description,
+            "rate"        : tax.rate,
+            "cost_center" : tax.cost_center,
+        })
+
+    credit_note.insert()
+
+    submitted = False
+    if auto_submit:
+        try:
+            credit_note.submit()
+            submitted = True
+        except Exception:
+            frappe.log_error(
+                title=f"Bulk DN Return - Credit Note Submit Failed ({si_name})",
+                message=frappe.get_traceback()
+            )
+
+    return {
+        "name"       : credit_note.name,
+        "si_name"    : si_name,
+        "submitted"  : submitted,
+        "grand_total": abs(flt(credit_note.grand_total)),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# EXPOSED: dipanggil dari Client Script untuk preview SI
+# ─────────────────────────────────────────────────────────────
+@frappe.whitelist()
+def get_si_for_dn(dn_name):
+    """Wrapper publik agar bisa dipanggil dari browser."""
+    return _get_si_for_dn(dn_name)
+
+
+# ─────────────────────────────────────────────────────────────
+# MAIN WHITELISTED METHOD
+# ─────────────────────────────────────────────────────────────
+@frappe.whitelist()
+def create_bulk_return(dn_names, customer, items, auto_submit=1, remarks=""):
+    """
+    Buat Return Delivery Note + Credit Note (Return Sales Invoice)
+    dari beberapa DN sekaligus. Asumsi: 1 DN = 1 SI.
+
+    Args:
+        dn_names   : list nama DN (JSON string atau list)
+        customer   : nama customer
+        items      : list dict {
+                       item_code, qty, rate, uom, warehouse,
+                       source_dn, dn_detail,
+                       against_sales_order, so_detail
+                     }
+        auto_submit: 1 = submit semua dokumen, 0 = draft saja
+        remarks    : keterangan / alasan return
+
+    Returns:
+        dict {
+          return_dn    : {name, submitted, total_items, total_qty},
+          credit_notes : [{name, si_name, submitted, grand_total}, ...],
+          errors       : [str, ...]
+        }
+    """
+    if isinstance(dn_names, str):
+        dn_names = json.loads(dn_names)
+    if isinstance(items, str):
+        items = json.loads(items)
+
+    auto_submit = int(auto_submit)
+
+    # ── Validasi ────────────────────────────────────────────────
+    if not dn_names:
+        frappe.throw(_("Tidak ada Delivery Note yang dipilih."))
+    if not items:
+        frappe.throw(_("Tidak ada item yang dipilih untuk return."))
+
+    for dn_name in dn_names:
+        dn_customer = frappe.db.get_value("Delivery Note", dn_name, "customer")
+        if dn_customer != customer:
+            frappe.throw(_(
+                f"DN {dn_name} bukan milik customer {customer}. "
+                f"Customer-nya: {dn_customer}"
+            ))
+
+    ref_dn = frappe.get_doc("Delivery Note", dn_names[0])
+
+    # ── STEP 1: Build Return DN items & kelompokkan per source DN ─
+    return_items = []
+    total_qty    = 0.0
+    items_by_dn  = {}   # {dn_name: [item_dict, ...]}
+
+    for it in items:
+        qty = flt(it.get("qty", 0))
+        if qty <= 0:
+            continue
+
+        # Row untuk Return DN
+        dn_row = {
+            "item_code"           : it["item_code"],
+            "qty"                 : -qty,
+            "rate"                : flt(it.get("rate", 0)),
+            "uom"                 : it.get("uom", ""),
+            "stock_uom"           : it.get("uom", ""),
+            "conversion_factor"   : 1,
+            "warehouse"           : it["warehouse"],
+            "against_sales_order" : it.get("against_sales_order", ""),
+            "so_detail"           : it.get("so_detail", ""),
+        }
+        if it.get("source_dn"):
+            dn_row["delivery_note"] = it["source_dn"]
+        if it.get("dn_detail"):
+            dn_row["dn_detail"] = it["dn_detail"]
+
+        return_items.append(dn_row)
+        total_qty += qty
+
+        # Kelompokkan per DN untuk Credit Note
+        src = it.get("source_dn") or dn_names[0]
+        items_by_dn.setdefault(src, []).append({
+            "iReturn - Return DN Submit Failed",
+                message=frappe.get_traceback()
+            )
+
+    # ── STEP 3: Buat Credit Note per DN (1 DN = 1 SI = 1 CN) ────
+    credit_notes = []
+    errors       = []
+
+    for dn_name, dn_items in items_by_dn.items():
+        si_name = _get_si_for_dn(dn_name)
+
+        if not si_name:
+            errors.append(
+                f"⚠ Sales Invoice untuk DN <b>{dn_name}</b> tidak ditemukan — "
+                f"Credit Note tidak dibuat untuk DN ini."
+            )
+            continue
+
+        try:
+            cn = _create_credit_note(
+                si_name             = si_name,
+                return_items_for_si = dn_items,
+                remarks             = remarks or f"Return untuk DN {dn_name} / SI {si_name}",
+                auto_submit         = auto_submit,
+            )
+            credit_notes.append(cn)
+        except Exception as e:
+            frappe.log_error(
+                title=f"Bulk DN Return - Credit Note Failed ({si_name})",
+                message=frappe.get_traceback()
+            )
+            errors.append(f"⚠ Gagal buat Credit Note untuk SI <b>{si_name}</b>: {str(e)}")
+
+    return {
+        "return_dn"   : {
+            "name"       : return_dn.name,
+            "submitted"  : dn_submitted,
+            "total_items": len(return_items),
+            "total_qty"  : total_qty,
+        },
+        "credit_notes": credit_notes,
+        "errors"      : errors,
+    }

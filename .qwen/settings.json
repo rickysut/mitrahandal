@@ -1,7 +1,32 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "Bash(docker ps *)",
+      "Bash(docker inspect *)",
+      "Bash(docker exec *)",
+      "Bash(docker restart *)",
+      "Bash(grep *)",
+      "Bash(sed *)",
+      "Bash(docker cp *)",
+      "Bash(cat)",
+      "Bash(import *)",
+      "Bash(with)",
+      "Bash(as *)",
+      "Bash(script *)",
+      "Bash(doc *)",
+      "Bash('client script', *)",
+      "Bash(doc.script *)",
+      "Bash(doc.save)",
+      "Bash(frappe.db.commit)",
+      "Bash(print)",
+      "Bash(pyeof)",
+      "Bash(sys.path.insert)",
+      "Bash(frappe.init)",
+      "Bash(frappe.connect)",
+      "Bash(head *)",
+      "Bash(find *)"
     ]
   },
   "$version": 3

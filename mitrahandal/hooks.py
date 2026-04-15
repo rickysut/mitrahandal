@@ -67,13 +67,16 @@ app_license = "MIT"
 
 # Hook on document methods and events
 
-# doc_events = {
-#     "*": {
-#         "on_update": "method",
-#         "on_cancel": "method",
-#         "on_trash": "method"
-#     }
-# }
+doc_events = {
+    "Sales Invoice": {
+        "on_submit": "mitrahandal.mitrahandal.overrides.sales_invoice.update_customer_inventory_on_submit",
+        "on_cancel": "mitrahandal.mitrahandal.overrides.sales_invoice.update_customer_inventory_on_cancel",
+    },
+    "Sales Return": {
+        "on_submit": "mitrahandal.mitrahandal.doctype.sales_return.sales_return.on_submit",
+        "on_cancel": "mitrahandal.mitrahandal.doctype.sales_return.sales_return.on_cancel",
+    }
+}
 
 # Scheduled Tasks
 # ---------------
