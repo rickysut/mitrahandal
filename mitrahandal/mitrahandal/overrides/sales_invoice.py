@@ -26,6 +26,11 @@ def update_customer_inventory_on_submit(doc, method):
     if doc.docstatus != 1:  # Hanya proses jika submitted
         return
     
+    # Jangan proses jika ini adalah Return Invoice
+    if doc.is_return:
+        log_debug(f"Invoice {doc.name} adalah Return, skip processing")
+        return
+    
     customer = doc.customer
     if not customer:
         return
@@ -46,45 +51,65 @@ def update_customer_inventory_on_submit(doc, method):
     # Ambil customer doc
     customer_doc = frappe.get_doc("Customer", customer)
     
-    # Loop setiap item di invoice
+    # Group items: merge free items into priced items
+    item_groups = {}  # {item_code: {qty, amount, discount_amount, discount_percentage, warehouse}}
+    
     for item in doc.items:
-        # Hitung diskon (bisa dari item atau invoice)
-        discount_amount = item.discount_amount or 0
-        discount_percentage = item.discount_percentage or 0
+        item_code = item.item_code
         
-        # Tambah ke child table
+        if item.is_free_item:
+            # Free item: find and merge with priced item
+            if item_code in item_groups:
+                # Merge with existing priced item
+                item_groups[item_code]['qty'] += item.qty
+                # Recalculate price: (original amount) / (new total qty)
+                item_groups[item_code]['item_price'] = item_groups[item_code]['amount'] / item_groups[item_code]['qty']
+                # Recalculate total_row
+                item_groups[item_code]['total_row'] = item_groups[item_code]['amount']
+            else:
+                # No priced item found, skip this free item
+                log_debug(f"Free item {item_code} tidak ada item berbayar, skip")
+        else:
+            # Priced item
+            if item_code in item_groups:
+                # Already exists (multiple rows of same item), merge
+                item_groups[item_code]['qty'] += item.qty
+                item_groups[item_code]['amount'] += item.amount
+                item_groups[item_code]['discount_amount'] += (item.discount_amount or 0)
+                # Recalculate price
+                item_groups[item_code]['item_price'] = item_groups[item_code]['amount'] / item_groups[item_code]['qty']
+                item_groups[item_code]['total_row'] = item_groups[item_code]['amount']
+            else:
+                # New item
+                item_groups[item_code] = {
+                    'qty': item.qty,
+                    'amount': item.amount,
+                    'item_price': item.rate,
+                    'discount_amount': item.discount_amount or 0,
+                    'discount_percentage': item.discount_percentage or 0,
+                    'warehouse': item.warehouse or "",
+                    'total_row': item.amount
+                }
+    
+    # Create rows from grouped items
+    for item_code, data in item_groups.items():
         customer_doc.append("custom_inventory_list_", {
-            "item": item.item_code,
-            "item_price": item.rate,
-            "qty_in": item.qty,
-            "qty_return": 0,  # default (akan jadi negatif saat di-return)
-            "discount_percentage": discount_percentage,
-            "discount_amount": discount_amount,  # sesuaikan logika
-            "warehouse": item.warehouse or "",
+            "item": item_code,
+            "item_price": data['item_price'],
+            "qty_in": data['qty'],
+            "qty_return": 0,
+            "discount_percentage": data['discount_percentage'],
+            "discount_amount": data['discount_amount'],
+            "warehouse": data['warehouse'],
             "doc_no": doc.name,
             "sales_invoice": doc.name,
             "invoice_status": doc.docstatus,
-            "invoice_date": f"{doc.posting_date} {doc.posting_time}"
+            "invoice_date": f"{doc.posting_date} {doc.posting_time}",
+            "total_row": data['total_row']
         })
     
     # Simpan customer
     customer_doc.save(ignore_permissions=True)
-    
-    # Update total_row secara langsung ke database (karena field read_only)
-    for item in doc.items:
-        # Cari child record yang baru dibuat
-        child_name = frappe.db.get_value("Customer Inventory Item", {
-            "parent": customer,
-            "parenttype": "Customer",
-            "parentfield": "custom_inventory_list_",
-            "sales_invoice": doc.name,
-            "item": item.item_code
-        })
-        
-        if child_name:
-            frappe.db.set_value("Customer Inventory Item", child_name, "total_row", item.amount)
-            log_debug(f"Updated total_row for {child_name}: {item.amount}")
-    
     frappe.db.commit()
     
     log_debug(f"Customer inventory updated untuk {len(doc.items)} item")
@@ -96,6 +121,11 @@ def update_customer_inventory_on_cancel(doc, method):
     """
 
     log_debug(f"Cancel invoice {doc.name}")
+
+    # Jangan proses jika ini adalah Return Invoice
+    if doc.is_return:
+        log_debug(f"Invoice {doc.name} adalah Return, skip processing")
+        return
 
     customer = doc.customer
     if not customer:

@@ -16,7 +16,6 @@
   "date",
   "customer_return_no",
   "customer_name",
-  "nomor_faktur_pajak",
   "warehouse_section",
   "good_whse",
   "column_break_uxpt",
@@ -98,7 +97,7 @@
    "fieldname": "good_whse",
    "fieldtype": "Link",
    "label": "Good Stock Warehouse",
-   "link_filters": "[[\"Warehouse\",\"is_group\",\"=\",0]]",
+   "link_filters": "[[\"Warehouse\",\"is_group\",\"=\",0],[\"Warehouse\",\"is_rejected_warehouse\",\"=\",0]]",
    "options": "Warehouse",
    "reqd": 1
   },
@@ -123,18 +122,13 @@
    "fieldtype": "Table",
    "label": "Items",
    "options": "Sales Return Item"
-  },
-  {
-   "fieldname": "nomor_faktur_pajak",
-   "fieldtype": "Data",
-   "label": "No. Faktur Pajak"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-04-14 15:18:04.139523",
+ "modified": "2026-04-17 14:44:31.256706",
  "modified_by": "Administrator",
  "module": "Mitrahandal",
  "name": "Sales Return",

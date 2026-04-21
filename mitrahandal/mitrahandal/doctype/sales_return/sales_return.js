@@ -12,6 +12,8 @@ frappe.ui.form.on("Sales Return", {
 		if (!frm.doc.date) {
 			frm.set_value("date", frappe.datetime.get_today());
 		}
+		let grid = frm.get_field("items").grid;
+		grid.cannot_add_rows = true;
 	},
 
 	refresh(frm) {
