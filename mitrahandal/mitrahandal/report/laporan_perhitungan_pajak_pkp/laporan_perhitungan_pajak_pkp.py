@@ -105,8 +105,6 @@ def get_data(filters):
 
     # Build filters for frappe.get_all
     si_filters = {"docstatus": 1}
-
-    si_filters = {"docstatus": 1}
     if filters.get("from_date") and filters.get("to_date"):
         si_filters["posting_date"] = [
             "between",
@@ -158,18 +156,18 @@ def get_data(filters):
             if not warehouse_match:
                 continue
 
-        row_data = {
-            "inv_date": inv.posting_date,
-            "inv_number": inv.custom_doc_no,
-            "customer": inv.customer,
-            "customer_name": inv.customer_name,
-            "customer_tax": inv.tax_id,
-            "coretax_number": "0.001-" + inv.custom_doc_no,
-            "coretax_date": inv.posting_date,
-            "inv_dpp": inv.net_total,
-            "inv_ppn": inv.total_taxes_and_charges,
-        }
-        data.append(row_data)
+                row_data = {
+                    "inv_date": inv.posting_date,
+                    "inv_number": inv.custom_doc_no,
+                    "customer": inv.customer,
+                    "customer_name": inv.customer_name,
+                    "customer_tax": inv.tax_id,
+                    "coretax_number": "0.001-" + inv.custom_doc_no,
+                    "coretax_date": inv.posting_date,
+                    "inv_dpp": inv.net_total,
+                    "inv_ppn": inv.total_taxes_and_charges,
+                }
+                data.append(row_data)
 
     return data
 
@@ -197,7 +195,7 @@ def export_to_excel(filters):
         # Create Workbook
         wb = Workbook()
         ws = wb.active
-        ws.title = "Lap. Perhitungan Pajak PKP"
+        ws.title = "PT"
 
         # Define styles
         title_font = Font(bold=True, size=12)
