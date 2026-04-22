@@ -135,7 +135,8 @@ def get_data(filters):
         references = frappe.get_all(
             "Payment Entry Reference",
             filters={"parent": pe.name},
-            fields=["reference_name", "reference_doctype", "allocated_amount"]
+            fields=["reference_name", "reference_doctype", "allocated_amount"],
+            order_by="reference_name ASC",
         )
 
         # Add sequential number for form_no
