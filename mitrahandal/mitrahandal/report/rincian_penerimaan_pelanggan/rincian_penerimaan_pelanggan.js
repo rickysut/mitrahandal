@@ -41,11 +41,11 @@ frappe.query_reports["Rincian Penerimaan Pelanggan"] = {
 			frappe.call({
                 method: "mitrahandal.mitrahandal.report.rincian_penerimaan_pelanggan.rincian_penerimaan_pelanggan.export_to_excel",
                 args: { filters: filters },
-                freeze: true,
-                freeze_message: __("Generating Excel file..."),
+                // freeze: true,
+                // freeze_message: __("Generating Excel file..."),
                 callback: function(r) {
                     if (r.message) {
-                        window.open(r.message.file_url, '_blank');
+                        window.open(r.message.file_url, '_self');
                         frappe.show_alert({ message: __('File downloaded!'), indicator: 'green' });
                     }
                 },

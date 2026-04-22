@@ -73,11 +73,11 @@ frappe.query_reports["Laporan Perhitungan Pajak PKP"] = {
 			frappe.call({
                 method: "mitrahandal.mitrahandal.report.laporan_perhitungan_pajak_pkp.laporan_perhitungan_pajak_pkp.export_to_excel",
                 args: { filters: filters },
-                freeze: true,
-                freeze_message: __("Generating Excel file..."),
+                // freeze: true,
+                // freeze_message: __("Generating Excel file..."),
                 callback: function(r) {
                     if (r.message) {
-                        window.open(r.message.file_url, '_blank');
+                        window.open(r.message.file_url, '_self');
                         frappe.show_alert({ message: __('File downloaded!'), indicator: 'green' });
                     }
                 },

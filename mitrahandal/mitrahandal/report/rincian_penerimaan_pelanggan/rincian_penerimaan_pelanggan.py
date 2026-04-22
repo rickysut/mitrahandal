@@ -151,7 +151,6 @@ def get_data(filters):
                 
                 if invoice:
                     row_data = {
-                        "roq_no": no,
                         "form_no": f"{pe.name}{str(seq_no).zfill(3)}",
                         "posting_date": pe.posting_date,
                         "cheque_date": pe.reference_date,
@@ -177,410 +176,229 @@ def get_data(filters):
 @frappe.whitelist()
 def export_to_excel(filters):
     """
-    Export laporan  Excel with custom format
+    Export Rincian Penerimaan Pelanggan ke Excel sesuai format laporan
     """
     import io
     from frappe.utils.file_manager import save_file
-
+ 
     try:
-        # Parse filters if string
         if isinstance(filters, str):
             filters = json.loads(filters)
-
-        # Ensure filters is a dict
         if not isinstance(filters, dict):
             filters = {}
+ 
+        # ── Fonts ──────────────────────────────────────────────────────────
+        font_title_company = Font(name="Arial", bold=True, size=14)
+        font_title_report  = Font(name="Arial", bold=True, size=12, color="FF0000")
+        font_title_date    = Font(name="Arial", bold=True, size=11)
+        font_header        = Font(name="Arial", bold=True, size=11)
+        font_data          = Font(name="Arial", size=11)
+        font_filtered      = Font(name="Arial", italic=True, size=10)
+ 
+        # ── Alignments ─────────────────────────────────────────────────────
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+        right  = Alignment(horizontal="right",  vertical="center")
+ 
+        # ── Borders ────────────────────────────────────────────────────────
+        thin  = Side(style="thin")
+ 
+        def border(l=thin, r=thin, t=thin, b=thin):
+            return Border(left=l, right=r, top=t, bottom=b)
 
-        # Parse sales_persons into a list
-        sales_persons = filters.get("sales_persons")
-        if sales_persons:
-            if isinstance(sales_persons, str):
-                try:
-                    sales_persons = json.loads(sales_persons)
-                except:
-                    sales_persons = [sp.strip() for sp in sales_persons.split(",") if sp.strip()]
-            if not isinstance(sales_persons, list):
-                sales_persons = [sales_persons]
-            sales_persons = [sp.strip() for sp in sales_persons if sp.strip()]
-        else:
-            sales_persons = []
-
-        branch = filters.get("branch", "")
-        sdate = filters.get("sdate", "")
-        sdate_display = ""
-        if sdate:
+        std_border = border()
+        header_fill = PatternFill("solid", fgColor="D9D9D9")
+ 
+        # ── Helpers ────────────────────────────────────────────────────────
+        def fmt_date(d):
+            if not d:
+                return ""
             try:
-                sdate_display = getdate(sdate).strftime("%d-%m-%Y")
-            except:
-                sdate_display = str(sdate)
-
-        # Define styles
-        title_font = Font(bold=True, size=14)
-        header_font_bold = Font(bold=True, size=10)
-        header_font_normal = Font(size=9)
-        small_font = Font(size=8)
-
-        center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        left_alignment = Alignment(horizontal="left", vertical="center")
-        right_alignment = Alignment(horizontal="right", vertical="center")
-
-        thin_border = Border(
-            left=Side(style="thin"),
-            right=Side(style="thin"),
-            top=Side(style="thin"),
-            bottom=Side(style="thin")
-        )
-
-        thick_border = Border(
-            left=Side(style="thin"),
-            right=Side(style="thin"),
-            top=Side(style="thick"),
-            bottom=Side(style="thick")
-        )
-
-        def build_sheet(ws, sp_name, data):
-            """Build a single sheet for one Sales Person"""
-            # Set page setup
-            ws.page_setup.orientation = "landscape"
-            ws.page_setup.paper_size = ws.PAPERSIZE_A4
-            ws.page_setup.fitToPage = False
-
-            # Set column widths
-            ws.column_dimensions['A'].width = 5
-            ws.column_dimensions['B'].width = 12
-            ws.column_dimensions['C'].width = 35
-            ws.column_dimensions['D'].width = 8
-            ws.column_dimensions['E'].width = 14
-            ws.column_dimensions['F'].width = 11
-            ws.column_dimensions['G'].width = 11
-            ws.column_dimensions['H'].width = 13
-            ws.column_dimensions['I'].width = 13
-            ws.column_dimensions['J'].width = 8
-            ws.column_dimensions['K'].width = 12
-            ws.column_dimensions['L'].width = 10
-            ws.column_dimensions['M'].width = 12
-            ws.column_dimensions['N'].width = 12
-            ws.column_dimensions['O'].width = 20
-
-            # ===== ROW 2: Company Name and Sales Person =====
-            branch_part = f" {branch}" if branch else ""
-            ws['A2'] = f"PT. MHG{branch_part.upper()}"
-            ws['A2'].font = header_font_bold
-            ws['A2'].alignment = left_alignment
-
-            # Sales Person label - M2
-            ws['M2'] = "Sales Person"
-            ws['M2'].font = small_font
-            ws['N2'] = ":" + sp_name
-            ws['N2'].font = small_font
-            # ws['O2'] = sp_name
-            # ws['O2'].font = small_font
-            # ws['O2'].alignment = left_alignment
-
-            # ===== ROW 3: No and Title =====
-            ws['A3'] = "No:"
-            ws['A3'].font = small_font
-            ws['A3'].alignment = left_alignment
-
-            # B3: date format mmyyyy.dd.A
-            if sdate:
-                try:
-                    sdate_parsed = getdate(sdate)
-                    ws['B3'] = sdate_parsed.strftime("%m%Y.%d.A")
-                except:
-                    ws['B3'] = ""
-            else:
-                ws['B3'] = ""
-            ws['B3'].font = small_font
-            ws['B3'].alignment = left_alignment
-
-            ws.merge_cells('F3:I3')
-            ws['F3'] = "LAPORAN HASIL TAGIHAN"
-            ws['F3'].font = title_font
-            ws['F3'].alignment = center_alignment
-
-            # Tanggal - M3
-            ws['M3'] = "Tanggal"
-            ws['M3'].font = small_font
-            ws['N3'] = ": " + sdate_display if sdate_display else ""
-            ws['N3'].font = small_font
-            ws['N3'].alignment = left_alignment
-
-            # ===== ROW 5: Main Section Headers =====
-            ws.merge_cells('A5:D5')
-            ws['A5'] = "CUSTOMER"
-            ws['A5'].font = header_font_bold
-            ws['A5'].alignment = center_alignment
-            for col in 'ABCD':
-                ws[f'{col}5'].border = thin_border
-
-            ws.merge_cells('E5:I5')
-            ws['E5'] = "INFO TAGIHAN"
-            ws['E5'].font = header_font_bold
-            ws['E5'].alignment = center_alignment
-            for col in 'EFGHI':
-                ws[f'{col}5'].border = thin_border
-
-            ws.merge_cells('J5:N5')
-            ws['J5'] = "PEMBAYARAN"
-            ws['J5'].font = header_font_bold
-            ws['J5'].alignment = center_alignment
-            for col in 'JKLMN':
-                ws[f'{col}5'].border = thin_border
-
-            ws.merge_cells('O5:O7')
-            ws['O5'] = "Keterangan"
-            ws['O5'].font = header_font_bold
-            ws['O5'].alignment = center_alignment
-            ws['O5'].border = thin_border
-            ws['O6'].border = thin_border
-            ws['O7'].border = thin_border
-
-            # ===== ROW 6: Sub-headers =====
-            ws['A6'] = "No."
-            ws['A6'].font = header_font_bold
-            ws['A6'].alignment = center_alignment
-            ws['A6'].border = thin_border
-
-            ws['B6'] = "Cust ID"
-            ws['B6'].font = header_font_bold
-            ws['B6'].alignment = center_alignment
-            ws['B6'].border = thin_border
-
-            ws['C6'] = "Nama Customer"
-            ws['C6'].font = header_font_bold
-            ws['C6'].alignment = center_alignment
-            ws['C6'].border = thin_border
-
-            ws['D6'] = "KET"
-            ws['D6'].font = header_font_bold
-            ws['D6'].alignment = center_alignment
-            ws['D6'].border = thin_border
-
-            ws.merge_cells('E6:E7')
-            ws['E6'] = "Nomor"
-            ws['E6'].font = header_font_bold
-            ws['E6'].alignment = center_alignment
-            ws['E6'].border = thin_border
-            ws['E7'].border = thin_border
-
-            ws.merge_cells('F6:G6')
-            ws['F6'] = "Tanggal"
-            ws['F6'].font = header_font_bold
-            ws['F6'].alignment = center_alignment
-            ws['F6'].border = thin_border
-
-            ws.merge_cells('H6:H7')
-            ws['H6'] = "Grand\nTotal"
-            ws['H6'].font = header_font_bold
-            ws['H6'].alignment = center_alignment
-            ws['H6'].border = thin_border
-            ws['H7'].border = thin_border
-
-            ws.merge_cells('I6:I7')
-            ws['I6'] = "Balance\nDue"
-            ws['I6'].font = header_font_bold
-            ws['I6'].alignment = center_alignment
-            ws['I6'].border = thin_border
-            ws['I7'].border = thin_border
-
-            ws.merge_cells('J6:J7')
-            ws['J6'] = "Bank"
-            ws['J6'].font = header_font_bold
-            ws['J6'].alignment = center_alignment
-            ws['J6'].border = thin_border
-            ws['J7'].border = thin_border
-
-            ws.merge_cells('K6:M6')
-            ws['K6'] = "Cek / BG Number"
-            ws['K6'].font = header_font_bold
-            ws['K6'].alignment = center_alignment
-            ws['K6'].border = thin_border
-
-            ws.merge_cells('N6:N7')
-            ws['N6'] = "TUNAI"
-            ws['N6'].font = header_font_bold
-            ws['N6'].alignment = center_alignment
-            ws['N6'].border = thin_border
-            ws['N7'].border = thin_border
-
-            # ===== ROW 7: Sub-sub-headers =====
-            ws['F7'] = "Invoice"
-            ws['F7'].font = header_font_normal
-            ws['F7'].alignment = center_alignment
-            ws['F7'].border = thin_border
-
-            ws['G7'] = "J.T."
-            ws['G7'].font = header_font_normal
-            ws['G7'].alignment = center_alignment
-            ws['G7'].border = thin_border
-
-            ws['K7'] = "Nomor"
-            ws['K7'].font = header_font_normal
-            ws['K7'].alignment = center_alignment
-            ws['K7'].border = thin_border
-
-            ws['L7'] = "Tg.Jl"
-            ws['L7'].font = header_font_normal
-            ws['L7'].alignment = center_alignment
-            ws['L7'].border = thin_border
-
-            ws['M7'] = "Nominal"
-            ws['M7'].font = header_font_normal
-            ws['M7'].alignment = center_alignment
-            ws['M7'].border = thin_border
-
-            ws['E7'].border = thin_border
-            ws['H7'].border = thin_border
-            ws['I7'].border = thin_border
-            ws['J7'].border = thin_border
-            ws['N7'].border = thin_border
-
-            # ===== DATA ROWS (starting row 8) =====
-            start_row = 8
-            for row_idx, row in enumerate(data, start=0):
-                row_num = start_row + row_idx
-
-                def set_cell(col, value, alignment=center_alignment, number_format=None, font=None):
-                    cell = ws.cell(row=row_num, column=col, value=value)
-                    cell.border = thin_border
-                    cell.alignment = alignment
-                    if number_format:
-                        cell.number_format = number_format
-                    if font:
-                        cell.font = font
-
-                set_cell(1, row_idx + 1, center_alignment)
-                set_cell(2, row.get("customer", ""), left_alignment)
-                set_cell(3, row.get("customer_name", ""), left_alignment)
-                set_cell(4, "", center_alignment)
-                set_cell(5, row.get("custom_doc_no", ""), center_alignment)
-
-                inv_date = row.get("posting_date", "")
-                if inv_date:
-                    try:
-                        inv_date = getdate(inv_date).strftime("%d/%m/%y")
-                    except:
-                        pass
-                set_cell(6, inv_date, center_alignment)
-
-                due_date = row.get("due_date", "")
-                if due_date:
-                    try:
-                        due_date = getdate(due_date).strftime("%d/%m/%y")
-                    except:
-                        pass
-                set_cell(7, due_date, center_alignment)
-
-                grand_total = flt(row.get("paid_amount", 0))
-                set_cell(8, grand_total, right_alignment, '#,##0')
-
-                balance = flt(row.get("outstanding_amount", 0))
-                set_cell(9, balance, right_alignment, '#,##0')
-
-                set_cell(10, "", center_alignment)
-                set_cell(11, "", left_alignment)
-                set_cell(12, "", center_alignment)
-                set_cell(13, "", right_alignment, '#,##0')
-                set_cell(14, "", right_alignment, '#,##0')
-                set_cell(15, "", left_alignment)
-
-            # ===== TOTAL ROW =====
-            total_row = start_row + len(data)
-
-            ws.merge_cells(f'E{total_row}:G{total_row}')
-            total_cell = ws.cell(row=total_row, column=5, value="TOTAL")
-            total_cell.font = header_font_bold
-            total_cell.alignment = right_alignment
-            total_cell.border = thin_border
-
-            for col in range(1, 16):
-                ws.cell(row=total_row, column=col).border = thick_border
-
-            total_grand = sum(flt(row.get("paid_amount", 0)) for row in data)
-            ws.cell(row=total_row, column=8, value=total_grand).font = header_font_bold
-            ws.cell(row=total_row, column=8).number_format = '#,##0'
-            ws.cell(row=total_row, column=8).alignment = right_alignment
-
-            total_balance = sum(flt(row.get("outstanding_amount", 0)) for row in data)
-            ws.cell(row=total_row, column=9, value=total_balance).font = header_font_bold
-            ws.cell(row=total_row, column=9).number_format = '#,##0'
-            ws.cell(row=total_row, column=9).alignment = right_alignment
-
-            ws.cell(row=total_row, column=14, value=0).font = header_font_bold
-            ws.cell(row=total_row, column=14).number_format = '#,##0'
-            ws.cell(row=total_row, column=14).alignment = right_alignment
-
-            # ===== SIGNATURE SECTION =====
-            sign_row = total_row + 2
-
-            signatures = [
-                ('B', 'Disiapkan Oleh,', 'Admin A/R'),
-                ('D', 'Dicek Oleh,', 'Collector'),
-                ('F', 'Mengetahui,', 'Koord. Finance'),
-                ('H', 'Diterbitkan Oleh,', sp_name),
-                ('J', 'Diterima Oleh,', 'Admin A/R'),
-                ('L', 'Menyetujui,', 'BM/Assistant')
-            ]
-
-            for col, label, role in signatures:
-                ws[f'{col}{sign_row}'] = label
-                ws[f'{col}{sign_row}'].font = small_font
-                ws[f'{col}{sign_row}'].alignment = left_alignment
-
-                ws[f'{col}{sign_row+2}'] = role
-                ws[f'{col}{sign_row+2}'].font = small_font
-                ws[f'{col}{sign_row+2}'].alignment = left_alignment
-
-        # Create Workbook with one sheet per Sales Person
+                return getdate(d).strftime("%d %b %Y")
+            except Exception:
+                return str(d)
+ 
+        def set_cell(ws, row, col, value, font=None, alignment=None,
+                     number_format=None, fill=None, bdr=None):
+            cell = ws.cell(row=row, column=col, value=value)
+            if font:        cell.font        = font
+            if alignment:   cell.alignment   = alignment
+            if number_format: cell.number_format = number_format
+            if fill:        cell.fill        = fill
+            if bdr:         cell.border      = bdr
+            return cell
+        
+        def set_row_border(ws, row, col_start, col_end, bdr=None):
+            bdr = bdr or std_border
+            for col in range(col_start, col_end + 1):
+                ws.cell(row=row, column=col).border = bdr
+ 
+        # ── Date range display ─────────────────────────────────────────────
+        sdate = filters.get("start_date", "")
+        edate = filters.get("end_date", "")
+        sdate_display = fmt_date(sdate)
+        edate_display = fmt_date(edate)
+        date_range = f"Dari {sdate_display} ke {edate_display}"
+ 
+        # ── Get data ───────────────────────────────────────────────────────
+        all_data = get_data(filters)
+ 
+        # Group data by bank_account (Payment Entry.bank_account)
+        # Fetch bank account labels for each payment entry
+        grouped = defaultdict(list)
+        for row in all_data:
+            # form_no contains pe.name prefix, parse it back
+            pe_name = row["form_no"][:-3]  # strip last 3 digits (seq)
+            ba = frappe.db.get_value("Payment Entry", pe_name, "bank_account") or ""
+            ba_label = ba
+            if ba:
+                # Get account name for display
+                # account_name = frappe.db.get_value("Bank Account", ba, "account") or ba
+                # ba_label = f"{ba} - {account_name}" if account_name != ba else ba
+                ba_label = f"{ba}"
+                
+            grouped[ba_label].append(row)
+ 
+        # ── Build workbook ─────────────────────────────────────────────────
         wb = Workbook()
-
-        if sales_persons:
-            for idx, sp in enumerate(sales_persons):
-                # Get data for this specific sales person
-                sp_filters = {**filters, "sales_persons": [sp]}
-                sp_data = get_data(sp_filters)
-
-                # Sanitize sheet name (max 31 chars, no special chars)
-                sheet_name = sp[:31].replace("/", "-").replace("\\", "-").replace(":", "-").replace("?", "-").replace("*", "-")
-                if idx == 0:
-                    ws = wb.active
-                    ws.title = sheet_name
-                else:
-                    ws = wb.create_sheet(title=sheet_name)
-
-                build_sheet(ws, sp, sp_data)
-        else:
-            # Fallback: single sheet with all data
-            ws = wb.active
-            ws.title = "Laporan Hasil Tagihan"
-            all_data = get_data(filters)
-            sp_label = ", ".join(sales_persons) if sales_persons else ""
-            build_sheet(ws, sp_label, all_data)
-
-        # Save to file
+        ws = wb.active
+        ws.title = "Rincian Penerimaan"
+ 
+        # Page setup
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.paper_size  = ws.PAPERSIZE_A4
+        ws.page_setup.fitToPage   = False
+ 
+        # Column widths  A    B     C     D       E    F     G       H   I
+        for i, w in enumerate([None, 28, 14, 14, 40, 16, 14, 16, 16, 16], start=0):
+            if i == 0 or w is None:
+                continue
+            ws.column_dimensions[get_column_letter(i)].width = w
+ 
+ 
+        # ── ROW 1: Company name ────────────────────────────────────────────
+        ws.merge_cells("A1:I1")
+        set_cell(ws, 1, 1, "PT. MITRA HANDAL SEJAHTERA",
+                 font=font_title_company, alignment=center)
+ 
+        # ── ROW 2: Report title ────────────────────────────────────────────
+        ws.merge_cells("A2:I2")
+        set_cell(ws, 2, 1, "Rincian Penerimaan Pelanggan",
+                 font=font_title_report, alignment=center)
+ 
+        # ── ROW 3: Date range ─────────────────────────────────────────────
+        ws.merge_cells("A3:I3")
+        set_cell(ws, 3, 1, date_range,
+                 font=font_title_date, alignment=center)
+ 
+        # ── ROW 4: Filter info (right-aligned) ────────────────────────────
+        # ws.merge_cells("A4:H4")
+        # filter_text = "Filtered by: No. Form, Dari, ke"
+        # set_cell(ws, 4, 1, filter_text,
+        #          font=font_filtered,
+        #          alignment=Alignment(horizontal="right", vertical="center"))
+ 
+        # ── ROW 5: blank ──────────────────────────────────────────────────
+ 
+        # ── ROW 6: Column headers ─────────────────────────────────────────
+        headers = [
+            "No. Form", "Tgl terima", "Tgl Cek",
+            "Nama Pelanggan", "No. Faktur (SO)",
+            "Tgl Faktur", "Total Diterima", "Nilai Terima", "Total Invoice"
+        ]
+        for col, h in enumerate(headers, start=1):
+            set_cell(ws, 5, col, h,
+                     font=font_header, alignment=center,
+                     fill=header_fill,
+                     bdr=border(thin, thin, thin, thin))
+ 
+        # ── DATA rows ─────────────────────────────────────────────────────
+        current_row = 6
+        grand_total_received = 0.0
+        grand_total_nilai    = 0.0
+        grand_total_invoice  = 0.0
+        TOTAL_COLS = 9  # A–I
+ 
+        for bank_label, rows in grouped.items():
+            # Bank group header row
+            ws.merge_cells(f"A{current_row}:I{current_row}")
+            set_cell(ws, current_row, 1,
+                     f"Penerimaan Bank : {bank_label}",
+                     font=Font(name="Arial", bold=True, size=10),
+                     alignment=left)
+            set_row_border(ws, current_row, 1, TOTAL_COLS)
+            current_row += 1
+ 
+            group_total_received = 0.0
+            group_total_nilai    = 0.0
+            group_total_invoice  = 0.0
+ 
+            for row in rows:
+                vals = [
+                    row.get("form_no", ""),
+                    fmt_date(row.get("posting_date")),
+                    fmt_date(row.get("cheque_date")),
+                    row.get("customer_name", ""),
+                    row.get("sales_invoice", ""),
+                    fmt_date(row.get("invoice_date")),
+                    flt(row.get("paid_amount", 0)),
+                    flt(row.get("amount", 0)),
+                    flt(row.get("total_invoice", 0))
+                ]
+ 
+                for col, val in enumerate(vals, start=1):
+                    if col in (7, 8, 9):
+                        set_cell(ws, current_row, col, val,
+                                 font=font_data, alignment=right,
+                                 number_format='#,##0.00', bdr=std_border)
+                    else:
+                        align = center if col in (1, 2, 3, 5, 6) else left
+                        set_cell(ws, current_row, col, val,
+                                 font=font_data, alignment=align, bdr=std_border)
+ 
+                group_total_received += flt(row.get("paid_amount", 0))
+                group_total_nilai    += flt(row.get("amount", 0))
+                group_total_invoice  += flt(row.get("total_invoice", 0))
+                current_row += 1
+ 
+            grand_total_received += group_total_received
+            grand_total_nilai    += group_total_nilai
+            grand_total_invoice  += group_total_invoice
+ 
+        # ── GRAND TOTAL row ────────────────────────────────────────────────
+        font_total = Font(name="Arial", bold=True, size=11)
+ 
+        ws.merge_cells(f"A{current_row}:F{current_row}")
+        set_cell(ws, current_row, 1, "Grand Total",
+                 font=font_total, alignment=right)
+        # Border all cells A–F (merged) + G, H, I
+        set_row_border(ws, current_row, 1, TOTAL_COLS)
+ 
+        set_cell(ws, current_row, 7, grand_total_received,
+                 font=font_total, alignment=right, number_format='#,##0.00')
+        set_cell(ws, current_row, 8, grand_total_nilai,
+                 font=font_total, alignment=right, number_format='#,##0.00')
+        set_cell(ws, current_row, 9, grand_total_invoice,
+                 font=font_total, alignment=right, number_format='#,##0.00')
+ 
+        # ── Save ───────────────────────────────────────────────────────────
         temp_file = io.BytesIO()
         wb.save(temp_file)
         temp_file.seek(0)
-
-        file_name = f"Laporan_Tagihan_{now_datetime().strftime('%Y%m%d_%H%M%S')}.xlsx"
-
-        # Save using Frappe file manager
+ 
+        file_name = f"Rincian_Penerimaan_Pelanggan_{now_datetime().strftime('%Y%m%d_%H%M%S')}.xlsx"
         file_doc = save_file(
             fname=file_name,
             content=temp_file.getvalue(),
             dt="Report",
-            dn="Laporan Hasil Tagihan",
+            dn="Rincian Penerimaan Pelanggan",
             folder="Home/Attachments",
             decode=False
         )
-
-        return {
-            "file_url": file_doc.file_url,
-            "file_name": file_name
-        }
-
+ 
+        return {"file_url": file_doc.file_url, "file_name": file_name}
+ 
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Laporan Hasil Tagihan Export Error")
+        frappe.log_error(frappe.get_traceback(), "Rincian Penerimaan Pelanggan Export Error")
         frappe.throw(f"Export failed: {str(e)}")
 
