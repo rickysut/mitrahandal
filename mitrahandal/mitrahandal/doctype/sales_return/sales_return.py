@@ -41,8 +41,8 @@ def get_sequential_custom_doc_no(original_doc_no, doctype):
 	
 	for doc_no in existing_returns:
 		# Extract the suffix number from custom_doc_no
-		# Pattern: original_doc_no-{number}
-		match = re.match(rf'^{re.escape(original_doc_no)}-(\d+)$', doc_no)
+		# Pattern: original_doc_no-R{number}
+		match = re.match(rf'^{re.escape(original_doc_no)}-R(\d+)$', doc_no)
 		if match:
 			suffix = int(match.group(1))
 			if suffix > max_suffix:
@@ -61,10 +61,18 @@ class SalesReturn(Document):
 			# Get available qty from field, default to 0 if not set
 			available_qty = flt(item.get("original_qty") or 0)
 			qty_return = flt(item.qty_return)
+			uom = item.get("uom")
 			
 			# Skip validation if available_qty is not set (0)
 			if available_qty == 0:
 				continue
+			
+			# If UOM is not CRT, convert available_qty to the selected UOM
+			# Conversion factor: 1 CRT = conversion_factor * target_UOM
+			if uom and uom != "CRT":
+				conversion_factor = self.get_conversion_factor(item.item, uom)
+				if conversion_factor and conversion_factor > 0:
+					available_qty = available_qty / conversion_factor
 				
 			if qty_return > available_qty:
 				frappe.throw(
@@ -75,6 +83,92 @@ class SalesReturn(Document):
 						item.item
 					)
 				)
+	
+	def get_conversion_factor(self, item_code, uom):
+		"""
+		Get conversion factor for converting from CRT to the given UOM.
+		
+		Args:
+			item_code: Item code
+			uom: Target UOM
+		
+		Returns:
+			Conversion factor, or None if not found
+		"""
+		if not item_code or not uom:
+			return None
+		
+		if uom == "CRT":
+			return 1.0
+		
+		try:
+			item_doc = frappe.get_doc("Item", item_code)
+			
+			# Get conversion factor from UOM Detail
+			if hasattr(item_doc, 'uoms') and item_doc.uoms:
+				for uom_detail in item_doc.uoms:
+					if uom_detail.uom == uom:
+						conversion_factor = flt(uom_detail.conversion_factor)
+						if conversion_factor > 0:
+							return conversion_factor
+			
+			return None
+		except Exception as e:
+			frappe.log_error(
+				f"Error getting conversion factor for {item_code} to {uom}: {str(e)}",
+				"Sales Return - Get Conversion Factor Error"
+			)
+			return None
+
+
+def convert_to_crt(item_code, qty, from_uom):
+	"""
+	Convert quantity from given UOM to CRT.
+	
+	Args:
+		item_code: Item code
+		qty: Quantity to convert
+		from_uom: Source UOM
+	
+	Returns:
+		Quantity in CRT, or None if conversion not possible
+	"""
+	if not item_code or not qty or not from_uom:
+		return None
+	
+	if from_uom == "CRT":
+		return qty
+	
+	try:
+		item_doc = frappe.get_doc("Item", item_code)
+		
+		# Get conversion factor from UOM Detail
+		if hasattr(item_doc, 'uoms') and item_doc.uoms:
+			for uom_detail in item_doc.uoms:
+				if uom_detail.uom == from_uom:
+					# Conversion factor: 1 CRT = conversion_factor * from_uom
+					# So: qty_in_crt = qty / conversion_factor
+					conversion_factor = flt(uom_detail.conversion_factor)
+					if conversion_factor > 0:
+						return flt(qty) * conversion_factor
+		
+		# If no conversion factor found, try to get from stock UOM
+		if item_doc.stock_uom == from_uom:
+			# If from_uom is stock UOM, check if CRT is in UOM Detail
+			if hasattr(item_doc, 'uoms') and item_doc.uoms:
+				for uom_detail in item_doc.uoms:
+					if uom_detail.uom == "CRT":
+						conversion_factor = flt(uom_detail.conversion_factor)
+						if conversion_factor > 0:
+							return flt(qty) * conversion_factor
+		
+		return None
+	except Exception as e:
+		frappe.log_error(
+			f"Error converting {qty} {from_uom} to CRT for item {item_code}: {str(e)}",
+			"Sales Return - UOM Conversion Error"
+		)
+		return None
 
 
 @frappe.whitelist()
@@ -245,7 +339,19 @@ def on_submit(doc, method):
 					# Create return item row
 					return_si_item = return_si.append("items", {})
 					return_si_item.item_code = return_item.item
-					return_si_item.qty = -flt(return_item.qty_return)  # Negative for returns
+					
+					# Convert qty to CRT for Sales Invoice (Return)
+					uom = return_item.get("uom")
+					qty_for_si = flt(return_item.qty_return)
+					if uom and uom != "CRT":
+						# Convert qty_return to CRT
+						crt_qty = convert_to_crt(return_item.item, qty_for_si, uom)
+						if crt_qty is not None:
+							qty_for_si = crt_qty
+							uom = "CRT"
+					
+					return_si_item.qty = -qty_for_si  # Negative for returns
+					return_si_item.uom = uom
 					return_si_item.rate = flt(return_item.rate)
 					return_si_item.discount_percentage = flt(return_item.discount_percentage)
 					return_si_item.warehouse = original_item.warehouse
@@ -530,7 +636,19 @@ def on_submit(doc, method):
 						
 						dn_row = return_dn.append("items", {})
 						dn_row.item_code = dn_item.item
-						dn_row.qty = -flt(dn_item.qty_return)  # Negative for returns
+						
+						# Convert qty to CRT for Delivery Note (Return)
+						uom = dn_item.get("uom")
+						qty_for_dn = flt(dn_item.qty_return)
+						if uom and uom != "CRT":
+							# Convert qty_return to CRT
+							crt_qty = convert_to_crt(dn_item.item, qty_for_dn, uom)
+							if crt_qty is not None:
+								qty_for_dn = crt_qty
+								uom = "CRT"
+						
+						dn_row.qty = -qty_for_dn  # Negative for returns
+						dn_row.uom = uom
 						dn_row.warehouse = target_warehouse
 						dn_row.custom_doc_no = dn_item.doc_no
 						
@@ -539,8 +657,6 @@ def on_submit(doc, method):
 							item_doc = frappe.get_doc("Item", dn_item.item)
 							if item_doc.item_group:
 								dn_row.item_group = item_doc.item_group
-							if item_doc.stock_uom:
-								dn_row.uom = item_doc.stock_uom
 						except Exception as e:
 							frappe.log_error(f"Error getting item details for {dn_item.item}: {str(e)}", "Sales Return Debug")
 					
