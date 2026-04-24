@@ -67,12 +67,12 @@ class SalesReturn(Document):
 			if available_qty == 0:
 				continue
 			
-			# If UOM is not CRT, convert available_qty to the selected UOM
+			# If UOM is not CRT, convert qty_return to CRT
 			# Conversion factor: 1 CRT = conversion_factor * target_UOM
 			if uom and uom != "CRT":
 				conversion_factor = self.get_conversion_factor(item.item, uom)
 				if conversion_factor and conversion_factor > 0:
-					available_qty = available_qty / conversion_factor
+					qty_return = qty_return * conversion_factor
 				
 			if qty_return > available_qty:
 				frappe.throw(
@@ -342,6 +342,10 @@ def on_submit(doc, method):
 					
 					# Convert qty to CRT for Sales Invoice (Return)
 					uom = return_item.get("uom")
+					# frappe.log_error(
+					# 	f"{uom} to CRT ",
+					# 	"Sales Return - UOM"
+					# )
 					qty_for_si = flt(return_item.qty_return)
 					if uom and uom != "CRT":
 						# Convert qty_return to CRT
@@ -360,7 +364,7 @@ def on_submit(doc, method):
 					return_si_item.custom_doc_no = return_item.doc_no
 				
 				# Copy taxes from original invoice
-				# frappe.log_error(f"Original SI taxes_and_charges: {original_si.taxes_and_charges}", "Sales Return Debug")
+				# frappe.log_error(f"return_si_item: {return_si_item}", "Sales Return Debug")
 				# frappe.log_error(f"Original SI has {len(original_si.taxes)} tax rows", "Sales Return Debug")
 				
 				if original_si.taxes:
@@ -421,7 +425,15 @@ def on_submit(doc, method):
 				# frappe.log_error(f"Processing return item for inventory update: {return_item.item}", "Sales Return Debug")
 				
 				item_code = return_item.item
+				uom = return_item.get("uom")
+					
 				return_qty = flt(return_item.qty_return)
+				if uom and uom != "CRT":
+					# Convert qty_return to CRT
+					crt_qty = convert_to_crt(return_item.item, return_qty, uom)
+					if crt_qty is not None:
+						return_qty = crt_qty
+						uom = "CRT"
 				sales_invoice = return_item.sales_invoice
 
 				if return_qty <= 0:
@@ -576,7 +588,7 @@ def on_submit(doc, method):
 				)
 				if dn_links:
 					has_delivery_note = True
-					frappe.log_error(f"SI {source_invoice} (custom_doc_no: {custom_doc_no}) has Delivery Notes: {dn_links}", "Sales Return Debug")
+					# frappe.log_error(f"SI {source_invoice} (custom_doc_no: {custom_doc_no}) has Delivery Notes: {dn_links}", "Sales Return Debug")
 					break
 			
 			message_parts = []
@@ -696,7 +708,7 @@ def on_submit(doc, method):
 					return_dn.submit()
 					
 					created_dns.append(return_dn.name)
-					frappe.log_error(f"Successfully created DN: {return_dn.name}", "Sales Return Debug")
+					# frappe.log_error(f"Successfully created DN: {return_dn.name}", "Sales Return Debug")
 				
 				if created_invoices:
 					message_parts.append(
